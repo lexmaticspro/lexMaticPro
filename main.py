@@ -1,51 +1,31 @@
 
-# LexMatic Pro IA - Abogado Virtual con Búsqueda Inteligente y Aproximada
+# LexMatic Pro IA - Abogado Virtual en la Nube
 
+from fastapi import FastAPI
 import pandas as pd
 from fuzzywuzzy import fuzz
 
-# Cargar modelos
-modelos = pd.read_csv('modelos.csv')
+# Cargar modelos (asegúrate que modelos.csv esté cargado en el repo)
+modelos = pd.read_csv("modelos.csv")
 
-print("🔍 LexMatic Pro IA - Abogado Virtual (Búsqueda Inteligente)")
+# Crear la aplicación FastAPI
+app = FastAPI()
 
-# Pregunta inicial: área del derecho
-categoria = input("¿En qué área estás? (Salud / Familia / Laboral / Discapacidad / Cautelares): ").capitalize()
+@app.get("/")
+def home():
+    return {"mensaje": "LexMatic Pro IA online. Use /buscar?categoria=XXX para consultar."}
 
-# Filtramos por categoría
-filtrados = modelos[modelos['categoria'] == categoria]
+@app.get("/buscar")
+def buscar(categoria: str):
+    # Filtramos por categoría exacta
+    filtrados = modelos[modelos['categoria'].str.lower() == categoria.lower()]
 
-if filtrados.empty:
-    print("❌ No tenemos modelos en esa área todavía.")
-else:
-    # Mostramos los títulos disponibles
-    print("\nModelos disponibles:")
-    for index, row in filtrados.iterrows():
-        print(f"- {row['titulo']}")
-
-    # Preguntar palabra clave
-    palabra = input("\nEscribe una palabra clave o concepto para buscar: ").lower()
-
-    resultados = []
-
-    for index, row in filtrados.iterrows():
-        # Evaluamos similitud
-        score_titulo = fuzz.partial_ratio(palabra, row['titulo'].lower())
-        score_contenido = fuzz.partial_ratio(palabra, row['contenido'].lower())
-        max_score = max(score_titulo, score_contenido)
-
-        # Si el score es alto, lo consideramos relevante
-        if max_score > 60:  # Umbral de 60%
-            resultados.append((row, max_score))
-
-    # Ordenar resultados por mejor coincidencia
-    resultados = sorted(resultados, key=lambda x: x[1], reverse=True)
-
-    if not resultados:
-        print("❌ No se encontraron modelos relevantes.")
-    else:
-        for row, score in resultados:
-            print(f"\n📚 Modelo encontrado: {row['titulo']}")
-            print(f"Contenido: {row['contenido']}")
-            print(f"Fundamento jurídico: {row['fundamento']}")
-            print(f"🔎 Nivel de coincidencia: {score}%")
+    # Si no hay resultados exactos, intentamos búsqueda aproximada
+    if filtrados.empty:
+        modelos['similitud'] = modelos['categoria'].apply(lambda x: fuzz.partial_ratio(x.lower(), categoria.lower()))
+        filtrados = modelos.sort_values(by='similitud', ascending=False).head(5)
+        resultados = filtrados.drop(columns=['similitud']).to_dict(orient="records")
+        return {"resultados_aproximados": resultados}
+    
+    # Si hay coincidencias exactas:
+    return {"resultados": filtrados.to_dict(orient="records")}
